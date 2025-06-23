@@ -1,33 +1,13 @@
-# Zulip API
+# Zulip Bots
 
-[![Build status](https://github.com/zulip/python-zulip-api/workflows/build/badge.svg)](
-https://github.com/zulip/python-zulip-api/actions?query=branch%3Amain+workflow%3Abuild)
-[![Coverage status](https://img.shields.io/codecov/c/github/zulip/python-zulip-api)](
-https://codecov.io/gh/zulip/python-zulip-api)
-
-This repository contains the source code for Zulip's PyPI packages:
-
-* `zulip`: [PyPI package](https://pypi.python.org/pypi/zulip/)
-  for Zulip's API bindings.
-* `zulip_bots`: [PyPI package](https://pypi.python.org/pypi/zulip-bots)
-  for Zulip's bots and bots API.
-* `zulip_botserver`: [PyPI package](https://pypi.python.org/pypi/zulip-botserver)
-  for Zulip's Flask Botserver.
-
-The source code is written in *Python 3*.
+This repo host my moderation bot for the HASD zulip community as well as any other
+utility bot I create.
 
 ## Development
 
-This is part of the Zulip open source project; see the
-[contributing guide](https://zulip.readthedocs.io/en/latest/overview/contributing.html)
-and [commit guidelines](https://zulip.readthedocs.io/en/latest/contributing/version-control.html).
-
-1. Fork and clone the Git repo, and set upstream to zulip/python-zulip-api:
+1. Clone the Git repo:
    ```
-   git clone https://github.com/<your_username>/python-zulip-api.git
-   cd python-zulip-api
-   git remote add upstream https://github.com/zulip/python-zulip-api.git
-   git fetch upstream
+   git clone https://github.com/aamirazad/zulip-bot.git
    ```
 
 2. Make sure you have [pip](https://pip.pypa.io/en/stable/installing/).
