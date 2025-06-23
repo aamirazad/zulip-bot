@@ -7,7 +7,7 @@ from typing import Dict, Any
 
 class ModBot(object):
     """
-    A docstring documenting this bot.
+    A moderation bot to help manage larger communities
     """
 
     def usage(self):
@@ -16,8 +16,10 @@ class ModBot(object):
 Available commands:
 - `@HASD purge N` - Delete last N messages in the current stream
 - `@HASD purge email@example.com N` - Delete last N messages from specified user
+- `@HASD purge email@example.com` - Delete all messages from specified user in current channel
+- `@HASD clean` Clean up all messages from the bot
 """
-        return """Your description of the bot"""
+        return """A moderation bot to help manage larger communities"""
 
     def handle_message(self, message, bot_handler):
         self.delete_command_msg(message)
@@ -36,7 +38,7 @@ Available commands:
         # Parse the command
         try:
             if content in ("", "help"):
-                self.send_help_messsage(msg)
+                self.send_help_message(msg)
                 return
 
             # Handle "purge N" command
@@ -47,12 +49,19 @@ Available commands:
                 return
 
             # Handle "purge email@example.com N" command
-            user_purge_match = re.match(r"purge\s+([^\s]+)\s+(\d+)", content)
-            if user_purge_match:
-                user_email = user_purge_match.group(1)
-                count = int(user_purge_match.group(2))
+            user_purge_r_match = re.match(r"purge\s+([^\s]+)\s+(\d+)", content)
+            if user_purge_r_match:
+                user_email = user_purge_r_match.group(1)
+                count = int(user_purge_r_match.group(2))
                 self.purge_user_messages(stream_name, user_email, count, msg)
                 return
+
+            # Handle "purge email@example.com" command
+            # user_purge_r_match = re.match(r"purge\s+([^\s]+)\s", content)
+            # if user_purge_r_match:
+                
+
+            # Handle "clean" command
 
             # If no valid command matched
             self.send_error_message(msg)
@@ -143,7 +152,7 @@ Available commands:
         error_msg = "Invalid command format" + self.help_msg
         self.send_response(original_msg, error_msg)
 
-    def send_help_messsage(self, original_msg: Dict[str, Any]) -> None:
+    def send_help_message(self, original_msg: Dict[str, Any]) -> None:
         """Send usage instructions"""
         help_msg = self.help_msg
         self.send_response(original_msg, help_msg)
