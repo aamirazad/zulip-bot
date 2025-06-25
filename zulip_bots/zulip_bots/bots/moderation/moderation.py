@@ -42,26 +42,31 @@ Available commands:
                 return
 
             # Handle "purge N" command
-            purge_match = re.match(r"purge\s+(\d+)", content)
+            purge_match = re.match(r"purge\s+(\d+)$", content)
             if purge_match:
                 count = int(purge_match.group(1))
                 self.purge_messages(stream_name, count, msg)
                 return
 
             # Handle "purge email@example.com N" command
-            user_purge_r_match = re.match(r"purge\s+([^\s]+)\s+(\d+)", content)
+            user_purge_r_match = re.match(r"purge\s+([^\s]+)\s+(\d+)$", content)
             if user_purge_r_match:
                 user_email = user_purge_r_match.group(1)
                 count = int(user_purge_r_match.group(2))
                 self.purge_user_messages(stream_name, user_email, count, msg)
                 return
 
-            # Handle "purge email@example.com" command
-            # user_purge_r_match = re.match(r"purge\s+([^\s]+)\s", content)
-            # if user_purge_r_match:
-                
+            # Handle "purge email@example.com" command (all messages from user)
+            user_purge_all_match = re.match(r"purge\s+([^\s@]+@[^\s]+)$", content)
+            if user_purge_all_match:
+                user_email = user_purge_all_match.group(1)
+                self.purge_user_messages(stream_name, user_email, 1000, msg)
+                return
 
-            # Handle "clean" command
+            # Handle "clean" command (delete all bot messages in stream)
+            if content.strip() == "clean":
+                self.purge_user_messages(stream_name, "hasd-bot@hasd.zulipchat.com", 1000, msg)
+                return
 
             # If no valid command matched
             self.send_error_message(msg)
