@@ -30,7 +30,7 @@ utility bot I create.
 4. If that succeeds, it will end with printing the following command:
 
     ```
-    source /.../python-zulip-api/.../activate
+    source zulip-api-py3-venv/bin/activate
     ```
 
     You can run this command to enter the virtual environment.

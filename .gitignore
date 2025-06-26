@@ -44,6 +44,7 @@ zuliprc
 .zuliprc
 botserverrc
 .botserverrc
+personalzuliprc
 
 # vim
 .swp

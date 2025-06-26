@@ -12,12 +12,15 @@ class ModBot(object):
 
     def usage(self):
         self.client = zulip.Client(config_file="./zuliprc")
+        self.adminClient = zulip.Client(config_file="./personalzuliprc")
         self.help_msg = """
 Available commands:
 - `@HASD purge N` - Delete last N messages in the current stream
 - `@HASD purge email@example.com N` - Delete last N messages from specified user
 - `@HASD purge email@example.com` - Delete all messages from specified user in current channel
 - `@HASD clean` Clean up all messages from the bot
+- `@HASD mute email@example.com` - Removes the specified user's ability to post messages
+- `@HASD unmute email@example.com` - Gives the specified user the ability to post messages
 """
         return """A moderation bot to help manage larger communities"""
 
@@ -66,6 +69,18 @@ Available commands:
             # Handle "clean" command (delete all bot messages in stream)
             if content.strip() == "clean":
                 self.purge_user_messages(stream_name, "hasd-bot@hasd.zulipchat.com", 1000, msg)
+                return
+            
+            user_mute_match = re.match(r"mute\s+([^\s@]+@[^\s]+)$", content)
+            if user_mute_match:
+                user_email = user_mute_match.group(1)
+                self.mute_user(user_email, msg)
+                return
+
+            user_unmute_match = re.match(r"unmute\s+([^\s@]+@[^\s]+)$", content)
+            if user_unmute_match:
+                user_email = user_unmute_match.group(1)
+                self.unmute_user(user_email, msg)
                 return
 
             # If no valid command matched
@@ -141,6 +156,41 @@ Available commands:
 
     def delete_command_msg(self, msg: Dict[str, Any]):
         self.client.delete_message(msg["id"])
+    
+    def mute_user(self, user_email: str, msg: Dict[str, Any]):
+        user = self.getUserByEmail(user_email)
+        userId = user["user"]["user_id"]
+
+        request = {
+            "delete": [userId]
+        }
+        res = self.adminClient.update_user_group_members(1066759, request)
+
+        if res["result"] == "success":
+            self.send_response(msg, f"Successfully muted user {user_email}")
+        else:
+            self.send_response(msg, res)
+        
+    def unmute_user(self, user_email: str, msg: Dict[str, Any]):
+        user = self.getUserByEmail(user_email)
+        userId = user["user"]["user_id"]
+
+        request = {
+            "add": [userId]
+        }
+        res = self.adminClient.update_user_group_members(1066759, request)
+
+        if res["result"] == "success":
+            self.send_response(msg, f"Successfully unmuted user {user_email}")
+        else:
+            self.send_response(msg, res)
+
+    def getUserByEmail(self, user_email: str):
+        result = self.client.call_endpoint(
+            url=f"/users/{user_email}",
+            method="GET",
+        )
+        return result
 
     def send_response(self, original_msg: Dict[str, Any], content: str) -> None:
         """Send a response message."""
