@@ -3,7 +3,10 @@
 import zulip
 import re
 from typing import Dict, Any
+import json
+import os
 
+NOTES_FILE = "./NOTES.json"
 
 class ModBot(object):
     """
@@ -21,6 +24,8 @@ Available commands:
 - `@HASD clean` Clean up all messages from the bot
 - `@HASD mute email@example.com` - Removes the specified user's ability to post messages
 - `@HASD unmute email@example.com` - Gives the specified user the ability to post messages
+- `@HASD getnotes email@example.com` - Get mod notes of the specified user
+- `@HASD addnote email@example.com <note>` - Adds a mod note to the specified user
 """
         return """A moderation bot to help manage larger communities"""
 
@@ -71,16 +76,33 @@ Available commands:
                 self.purge_user_messages(stream_name, "hasd-bot@hasd.zulipchat.com", 1000, msg)
                 return
             
+            # Handle mute command
             user_mute_match = re.match(r"mute\s+([^\s@]+@[^\s]+)$", content)
             if user_mute_match:
                 user_email = user_mute_match.group(1)
                 self.mute_user(user_email, msg)
                 return
 
+            # Handle unmute command
             user_unmute_match = re.match(r"unmute\s+([^\s@]+@[^\s]+)$", content)
             if user_unmute_match:
                 user_email = user_unmute_match.group(1)
                 self.unmute_user(user_email, msg)
+                return
+            
+            # Handle getnotes command
+            user_getnote_match = re.match(r"getnotes\s+([^\s@]+@[^\s]+)$", content)
+            if user_getnote_match:
+                user_email = user_getnote_match.group(1)
+                self.get_notes(user_email, author["user"]["user_id"], msg)
+                return
+
+            # Handle addnote
+            user_addnote_match = re.match(r"addnote\s+([^\s@]+@[^\s]+)\s+(.+)$", content)
+            if user_addnote_match:
+                user_email = user_addnote_match.group(1)
+                note = user_addnote_match.group(2)
+                self.add_note(user_email, note, msg)
                 return
 
             # If no valid command matched
@@ -172,8 +194,7 @@ Available commands:
             self.send_response(msg, res)
         
     def unmute_user(self, user_email: str, msg: Dict[str, Any]):
-        user = self.getUserByEmail(user_email)
-        userId = user["user"]["user_id"]
+        userId = self.getUserId(user_email)
 
         request = {
             "add": [userId]
@@ -184,13 +205,60 @@ Available commands:
             self.send_response(msg, f"Successfully unmuted user {user_email}")
         else:
             self.send_response(msg, res)
+    
+    def add_note(self, user_email: str, note: str, msg: Dict[str, Any]):
+        """Adds a note for a specific user."""
+        notes = self.load_notes()
+        user_id = str(self.getUserId(user_email))
+        if user_id not in notes:
+            notes[user_id] = []
+        notes[user_id].append(note)
+        self.save_notes(notes)
+        self.send_response(msg, "Note added")
 
-    def getUserByEmail(self, user_email: str):
+    def get_notes(self, user_email: str, author: int, msg: Dict[str, Any]):
+        """Retrieves all notes for a specific user."""
+        notes = self.load_notes()
+        user_id = str(self.getUserId(user_email))
+        if user_id in notes:
+            user_notes = notes[user_id]
+            if user_notes:
+                pretty_string = f"Notes for {user_email}:\n"
+                for i, note in enumerate(user_notes):
+                    pretty_string += f"{i+1}. {note}\n"
+                self.send_private_response(author, pretty_string.strip())
+                self.send_response(msg, "Private message sent with the notes")
+
+            else:
+                self.send_private_response(author, f"No notes found for {user_email}.")
+                return []
+        else:
+            self.send_private_response(author, f"No notes found for {user_email}.")
+            return []
+        
+    def load_notes(self):
+        """Loads notes from the JSON file."""
+        if os.path.exists(NOTES_FILE):
+            with open(NOTES_FILE, 'r') as f:
+                try:
+                    return json.load(f)
+                except json.JSONDecodeError:
+                    # Handle empty or malformed JSON file
+                    return {}
+        return {}
+
+    def save_notes(self, notes):
+        """Saves notes to the JSON file."""
+        with open(NOTES_FILE, 'w') as f:
+            json.dump(notes, f, indent=4) # indent for pretty printing
+
+    def getUserId(self, user_email: str):
         result = self.client.call_endpoint(
             url=f"/users/{user_email}",
             method="GET",
         )
-        return result
+        return result["user"]["user_id"]
+        
 
     def send_response(self, original_msg: Dict[str, Any], content: str) -> None:
         """Send a response message."""
@@ -198,6 +266,15 @@ Available commands:
             "type": original_msg["type"],
             "to": original_msg["display_recipient"],
             "subject": original_msg["subject"],
+            "content": content,
+        }
+        self.client.send_message(request)
+
+    def send_private_response(self, userId: int, content: str) -> None:
+        """Send a private message."""
+        request = {
+            "type": "private",
+            "to": [userId],
             "content": content,
         }
         self.client.send_message(request)
