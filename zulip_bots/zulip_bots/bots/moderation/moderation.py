@@ -18,9 +18,13 @@ class ModBot(object):
         self.adminClient = zulip.Client(config_file="./personalzuliprc")
         self.help_msg = """
 Available commands:
-- `@HASD purge N` - Delete last N messages in the current stream
-- `@HASD purge email@example.com N` - Delete last N messages from specified user
-- `@HASD purge email@example.com` - Delete all messages from specified user in current channel
+### User commands
+- `@HASD resolve` Mark thread as resolved
+### Moderation Commands
+- `@HASD purge N` - Delete last N messages in the current topic
+- `@HASD purge email@example.com N` - Delete last N messages from specified user in the current topic
+- `@HASD purge email@example.com` - Delete all messages from specified user the current topic
+- `@HASD mute email@example.com` - Remove the ability for the specified user to post messages
 - `@HASD clean` Clean up all messages from the bot
 - `@HASD mute email@example.com` - Removes the specified user's ability to post messages
 - `@HASD unmute email@example.com` - Gives the specified user the ability to post messages
@@ -37,11 +41,10 @@ Available commands:
         """Process bot commands."""
         content = msg["content"].strip()
         stream_name = msg.get("display_recipient", "")
+        topic_name = msg.get("subject", "")
 
         author = self.client.get_user_by_id(msg["sender_id"])
-        if int(author["user"]["role"]) > 300:
-            self.send_response(msg, "Unauthorized")
-            return
+
 
         # Parse the command
         try:
@@ -49,12 +52,14 @@ Available commands:
                 self.send_help_message(msg)
                 return
 
+            ## Mod commands
             # Handle "purge N" command
             purge_match = re.match(r"purge\s+(\d+)$", content)
             if purge_match:
-                count = int(purge_match.group(1))
-                self.purge_messages(stream_name, count, msg)
-                return
+                if self.check_is_mod(author, msg):
+                    count = int(purge_match.group(1))
+                    self.purge_messages(stream_name, topic_name, count, msg)
+                    return
 
             # Handle "purge email@example.com N" command
             user_purge_r_match = re.match(r"purge\s+([^\s]+)\s+(\d+)$", content)
@@ -111,8 +116,8 @@ Available commands:
         except Exception as e:
             self.send_response(msg, f"Error processing command: {str(e)}")
 
-    def purge_messages(self, stream_name: str, count: int, original_msg: Dict[str, Any]) -> None:
-        """Delete the last N messages from a stream."""
+    def purge_messages(self, stream_name: str, topic_name: str, count: int, original_msg: Dict[str, Any]) -> None:
+        """Delete the last N messages from a topic."""
         try:
             # Get messages
             response = self.client.get_messages(
@@ -120,7 +125,7 @@ Available commands:
                     "anchor": "newest",
                     "num_before": (count),
                     "num_after": 0,
-                    "narrow": [{"operator": "stream", "operand": stream_name}],
+                    "narrow": [{"operator": "channel", "operand": stream_name}, {"operator": "topic", "operand": topic_name}],
                 }
             )
 
@@ -141,9 +146,9 @@ Available commands:
             self.send_response(original_msg, f"Error while purging messages: {str(e)}")
 
     def purge_user_messages(
-        self, stream_name: str, user_email: str, count: int, original_msg: Dict[str, Any]
+        self, stream_name: str, topic_name:str, user_email: str, count: int, original_msg: Dict[str, Any]
     ) -> None:
-        """Delete the last N messages from a specific user in a stream."""
+        """Delete the last N messages from a specific user in a topic."""
         try:
             # Get messages
             response = self.client.get_messages(
@@ -152,7 +157,8 @@ Available commands:
                     "num_before": count,
                     "num_after": 0,
                     "narrow": [
-                        {"operator": "stream", "operand": stream_name},
+                        {"operator": "channel", "operand": stream_name},
+                        {"operator": "topic", "operand": topic_name},
                         {"operator": "sender", "operand": user_email},
                     ],
                 }
@@ -171,6 +177,42 @@ Available commands:
 
             self.send_response(
                 original_msg, f"Successfully deleted {deleted_count} messages from {user_email}"
+            )
+
+        except Exception as e:
+            self.send_response(original_msg, f"Error while purging user messages: {str(e)}")
+
+    def clean_bot_messages(self, stream_name: str, topic_name:str, original_msg: Dict[str, Any]):
+        """Delete all HASD bot messages in a topic"""
+
+        try:
+            # Get messages
+            response = self.client.get_messages(
+                {
+                    "anchor": "newest",
+                    "num_before": 1000,
+                    "num_after": 0,
+                    "narrow": [
+                        {"operator": "channel", "operand": stream_name},
+                        {"operator": "topic", "operand": topic_name},
+                        {"operator": "sender", "operand": "hasd-bot@hasd.zulipchat.com"}
+                    ],
+                }
+            )
+
+            if response["result"] != "success":
+                self.send_response(original_msg, response)
+                return
+
+            # Delete messages
+            deleted_count = 0
+            for message in response["messages"]:
+                del_response = self.client.delete_message(message["id"])
+                if del_response["result"] == "success":
+                    deleted_count += 1
+
+            self.send_response(
+                original_msg, f"Successfully deleted {deleted_count} messages"
             )
 
         except Exception as e:
@@ -288,6 +330,12 @@ Available commands:
         """Send usage instructions"""
         help_msg = self.help_msg
         self.send_response(original_msg, help_msg)
+
+    def check_is_mod(self, author, msg):
+        if int(author["user"]["role"]) > 300:
+            self.send_response(msg, "Unauthorized")
+            return False
+        return True
 
 
 handler_class = ModBot
