@@ -249,6 +249,7 @@ class ModBot(object):
 
         if res["result"] == "success":
             self.send_response(msg, f"Successfully muted user {user_email}")
+            self.send_private_response(userId, "You have been muted! You can continue to read the discussion, but are not allowed to post messages. Email a moderator if you would like to repeal this.")
         else:
             self.send_response(msg, res)
 
@@ -262,6 +263,7 @@ class ModBot(object):
 
         if res["result"] == "success":
             self.send_response(msg, f"Successfully unmuted user {user_email}")
+            self.send_private_response(userId, "Welcome back, you have been unmuted! Be sure to follow the ")
         else:
             self.send_response(msg, res)
 
@@ -340,7 +342,6 @@ class ModBot(object):
         )
         return result["user"]["user_id"]
 
-
     def send_response(self, original_msg: Dict[str, Any], content: str) -> None:
         """Send a response message."""
         request = {
@@ -382,9 +383,7 @@ Available commands:
 - `@**HASD** mute email@example.com` - Removes the specified user's ability to post messages
 - `@**HASD** unmute email@example.com` - Gives the specified user the ability to post messages
 - `@**HASD** getnotes email@example.com` - Get mod notes of the specified user
-- `@**HASD** addnote email@example.com <note>` - Adds a mod note to the specified user
-- `@**HASD** mute email@example.com` - Remove the ability for the specified user to post messages
-"""
+- `@**HASD** addnote email@example.com <note>` - Adds a mod note to the specified user"""
         self.send_response(msg, help_msg) 
 
     def is_mod(self, msg):
@@ -392,6 +391,5 @@ Available commands:
         if int(author["user"]["role"]) > 300:
             return False
         return True
-
 
 handler_class = ModBot
