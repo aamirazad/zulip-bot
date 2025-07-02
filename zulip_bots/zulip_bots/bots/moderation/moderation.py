@@ -19,23 +19,25 @@ class ModBot(object):
         self.help_msg = """
 Available commands:
 ### User commands
-- `@HASD resolve` Mark thread as resolved
+- `@**HASD** resolve` Mark topic as resolved
+- `@**HASD** unresolve` Mark topic as unresolved
 ### Moderation Commands
 - `@**HASD** purge N` - Delete last N messages in the current topic
 - `@**HASD** purge email@example.com N` - Delete last N messages from specified user in the current topic
 - `@**HASD** purge email@example.com` - Delete all messages from specified user the current topic
-- `@HASD clean` Clean up all messages from the bot
-- `@HASD mute email@example.com` - Removes the specified user's ability to post messages
-- `@HASD unmute email@example.com` - Gives the specified user the ability to post messages
-- `@HASD getnotes email@example.com` - Get mod notes of the specified user
-- `@HASD addnote email@example.com <note>` - Adds a mod note to the specified user
-- `@HASD mute email@example.com` - Remove the ability for the specified user to post messages
+- `@**HASD** clean` Clean up all messages from the bot
+- `@**HASD** mute email@example.com` - Removes the specified user's ability to post messages
+- `@**HASD** unmute email@example.com` - Gives the specified user the ability to post messages
+- `@**HASD** getnotes email@example.com` - Get mod notes of the specified user
+- `@**HASD** addnote email@example.com <note>` - Adds a mod note to the specified user
+- `@**HASD** mute email@example.com` - Remove the ability for the specified user to post messages
 """
         return """A moderation bot to help manage larger communities"""
 
     def handle_message(self, message, bot_handler):
-        self.delete_command_msg(message)
         self.process_command(message)
+        self.delete_command_msg(message)
+    
 
     def process_command(self, msg: Dict[str, Any]) -> None:
         """Process bot commands."""
@@ -52,7 +54,17 @@ Available commands:
 
             ## User commands
             # Handle "resolve" command
-
+            resolve_match = re.match(r"resolve$", content)
+            if resolve_match:
+                self.resolve(msg)
+                return
+            
+            # Handle "unresolve" command
+            unresolve_match = re.match(r"unresolve$", content)
+            if unresolve_match:
+                self.unresolve(msg)
+                return
+            
             ## Mod commands
             # Handle "purge N" command
             purge_match = re.match(r"purge\s+(\d+)$", content)
@@ -301,6 +313,24 @@ Available commands:
         """Saves notes to the JSON file."""
         with open(NOTES_FILE, 'w') as f:
             json.dump(notes, f, indent=4) # indent for pretty printing
+    
+    def resolve(self, msg: Dict[str, Any]):
+        request = {
+            "message_id": msg["id"],
+            "topic": f"✔ {msg["subject"]}", 
+            "propagate_mode": "change_all"
+        }
+        self.client.update_message(request)
+        return
+
+    def unresolve(self, msg: Dict[str, Any]):
+        request = {
+            "message_id": msg["id"],
+            "topic": msg["subject"].lstrip("✔ "), 
+            "propagate_mode": "change_all"
+        }
+        self.client.update_message(request)
+        return
 
     def getUserId(self, user_email: str):
         result = self.client.call_endpoint(
