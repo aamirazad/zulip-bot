@@ -21,15 +21,15 @@ Available commands:
 ### User commands
 - `@HASD resolve` Mark thread as resolved
 ### Moderation Commands
-- `@HASD purge N` - Delete last N messages in the current topic
-- `@HASD purge email@example.com N` - Delete last N messages from specified user in the current topic
-- `@HASD purge email@example.com` - Delete all messages from specified user the current topic
-- `@HASD mute email@example.com` - Remove the ability for the specified user to post messages
+- `@**HASD** purge N` - Delete last N messages in the current topic
+- `@**HASD** purge email@example.com N` - Delete last N messages from specified user in the current topic
+- `@**HASD** purge email@example.com` - Delete all messages from specified user the current topic
 - `@HASD clean` Clean up all messages from the bot
 - `@HASD mute email@example.com` - Removes the specified user's ability to post messages
 - `@HASD unmute email@example.com` - Gives the specified user the ability to post messages
 - `@HASD getnotes email@example.com` - Get mod notes of the specified user
 - `@HASD addnote email@example.com <note>` - Adds a mod note to the specified user
+- `@HASD mute email@example.com` - Remove the ability for the specified user to post messages
 """
         return """A moderation bot to help manage larger communities"""
 
@@ -42,15 +42,16 @@ Available commands:
         content = msg["content"].strip()
         stream_name = msg.get("display_recipient", "")
         topic_name = msg.get("subject", "")
-
         author = self.client.get_user_by_id(msg["sender_id"])
-
 
         # Parse the command
         try:
             if content in ("", "help"):
                 self.send_help_message(msg)
                 return
+
+            ## User commands
+            # Handle "resolve" command
 
             ## Mod commands
             # Handle "purge N" command
@@ -59,55 +60,62 @@ Available commands:
                 if self.check_is_mod(author, msg):
                     count = int(purge_match.group(1))
                     self.purge_messages(stream_name, topic_name, count, msg)
-                    return
+                return
 
             # Handle "purge email@example.com N" command
             user_purge_r_match = re.match(r"purge\s+([^\s]+)\s+(\d+)$", content)
             if user_purge_r_match:
-                user_email = user_purge_r_match.group(1)
-                count = int(user_purge_r_match.group(2))
-                self.purge_user_messages(stream_name, user_email, count, msg)
+                if self.check_is_mod(author, msg):
+                    user_email = user_purge_r_match.group(1)
+                    count = int(user_purge_r_match.group(2))
+                    self.purge_user_messages(stream_name, topic_name, user_email, count, msg)
                 return
 
             # Handle "purge email@example.com" command (all messages from user)
             user_purge_all_match = re.match(r"purge\s+([^\s@]+@[^\s]+)$", content)
             if user_purge_all_match:
-                user_email = user_purge_all_match.group(1)
-                self.purge_user_messages(stream_name, user_email, 1000, msg)
+                if self.check_is_mod(author, msg):
+                    user_email = user_purge_all_match.group(1)
+                    self.purge_user_messages(stream_name, topic_name, user_email, 1000, msg)
                 return
 
             # Handle "clean" command (delete all bot messages in stream)
             if content.strip() == "clean":
-                self.purge_user_messages(stream_name, "hasd-bot@hasd.zulipchat.com", 1000, msg)
+                if self.check_is_mod(author, msg):
+                    self.purge_user_messages(stream_name, topic_name, "hasd-bot@hasd.zulipchat.com", 1000, msg)
                 return
-            
+
             # Handle mute command
             user_mute_match = re.match(r"mute\s+([^\s@]+@[^\s]+)$", content)
             if user_mute_match:
-                user_email = user_mute_match.group(1)
-                self.mute_user(user_email, msg)
+                if self.check_is_mod(author, msg):
+                    user_email = user_mute_match.group(1)
+                    self.mute_user(user_email, msg)
                 return
 
             # Handle unmute command
             user_unmute_match = re.match(r"unmute\s+([^\s@]+@[^\s]+)$", content)
             if user_unmute_match:
-                user_email = user_unmute_match.group(1)
-                self.unmute_user(user_email, msg)
+                if self.check_is_mod(author, msg):
+                    user_email = user_unmute_match.group(1)
+                    self.unmute_user(user_email, msg)
                 return
-            
+
             # Handle getnotes command
             user_getnote_match = re.match(r"getnotes\s+([^\s@]+@[^\s]+)$", content)
             if user_getnote_match:
-                user_email = user_getnote_match.group(1)
-                self.get_notes(user_email, author["user"]["user_id"], msg)
+                if self.check_is_mod(author, msg):
+                    user_email = user_getnote_match.group(1)
+                    self.get_notes(user_email, author["user"]["user_id"], msg)
                 return
 
             # Handle addnote
             user_addnote_match = re.match(r"addnote\s+([^\s@]+@[^\s]+)\s+(.+)$", content)
             if user_addnote_match:
-                user_email = user_addnote_match.group(1)
-                note = user_addnote_match.group(2)
-                self.add_note(user_email, note, msg)
+                if self.check_is_mod(author, msg):
+                    user_email = user_addnote_match.group(1)
+                    note = user_addnote_match.group(2)
+                    self.add_note(user_email, note, msg)
                 return
 
             # If no valid command matched
@@ -220,7 +228,7 @@ Available commands:
 
     def delete_command_msg(self, msg: Dict[str, Any]):
         self.client.delete_message(msg["id"])
-    
+
     def mute_user(self, user_email: str, msg: Dict[str, Any]):
         user = self.getUserByEmail(user_email)
         userId = user["user"]["user_id"]
@@ -234,7 +242,7 @@ Available commands:
             self.send_response(msg, f"Successfully muted user {user_email}")
         else:
             self.send_response(msg, res)
-        
+
     def unmute_user(self, user_email: str, msg: Dict[str, Any]):
         userId = self.getUserId(user_email)
 
@@ -247,7 +255,7 @@ Available commands:
             self.send_response(msg, f"Successfully unmuted user {user_email}")
         else:
             self.send_response(msg, res)
-    
+
     def add_note(self, user_email: str, note: str, msg: Dict[str, Any]):
         """Adds a note for a specific user."""
         notes = self.load_notes()
@@ -277,7 +285,7 @@ Available commands:
         else:
             self.send_private_response(author, f"No notes found for {user_email}.")
             return []
-        
+
     def load_notes(self):
         """Loads notes from the JSON file."""
         if os.path.exists(NOTES_FILE):
@@ -300,7 +308,7 @@ Available commands:
             method="GET",
         )
         return result["user"]["user_id"]
-        
+
 
     def send_response(self, original_msg: Dict[str, Any], content: str) -> None:
         """Send a response message."""
