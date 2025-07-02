@@ -16,28 +16,11 @@ class ModBot(object):
     def usage(self):
         self.client = zulip.Client(config_file="./zuliprc")
         self.adminClient = zulip.Client(config_file="./personalzuliprc")
-        self.help_msg = """
-Available commands:
-### User commands
-- `@**HASD** resolve` Mark topic as resolved
-- `@**HASD** unresolve` Mark topic as unresolved
-### Moderation Commands
-- `@**HASD** purge N` - Delete last N messages in the current topic
-- `@**HASD** purge email@example.com N` - Delete last N messages from specified user in the current topic
-- `@**HASD** purge email@example.com` - Delete all messages from specified user the current topic
-- `@**HASD** clean` Clean up all messages from the bot
-- `@**HASD** mute email@example.com` - Removes the specified user's ability to post messages
-- `@**HASD** unmute email@example.com` - Gives the specified user the ability to post messages
-- `@**HASD** getnotes email@example.com` - Get mod notes of the specified user
-- `@**HASD** addnote email@example.com <note>` - Adds a mod note to the specified user
-- `@**HASD** mute email@example.com` - Remove the ability for the specified user to post messages
-"""
         return """A moderation bot to help manage larger communities"""
 
     def handle_message(self, message, bot_handler):
+        self.client.delete_message(message["id"])
         self.process_command(message)
-        self.delete_command_msg(message)
-    
 
     def process_command(self, msg: Dict[str, Any]) -> None:
         """Process bot commands."""
@@ -69,65 +52,81 @@ Available commands:
             # Handle "purge N" command
             purge_match = re.match(r"purge\s+(\d+)$", content)
             if purge_match:
-                if self.check_is_mod(author, msg):
+                if self.is_mod(msg):
                     count = int(purge_match.group(1))
                     self.purge_messages(stream_name, topic_name, count, msg)
+                else:
+                    self.send_response(msg, "Unauthorized")
                 return
 
             # Handle "purge email@example.com N" command
             user_purge_r_match = re.match(r"purge\s+([^\s]+)\s+(\d+)$", content)
             if user_purge_r_match:
-                if self.check_is_mod(author, msg):
+                if self.is_mod(msg):
                     user_email = user_purge_r_match.group(1)
                     count = int(user_purge_r_match.group(2))
                     self.purge_user_messages(stream_name, topic_name, user_email, count, msg)
+                else:
+                    self.send_response(msg, "Unauthorized")
                 return
 
             # Handle "purge email@example.com" command (all messages from user)
             user_purge_all_match = re.match(r"purge\s+([^\s@]+@[^\s]+)$", content)
             if user_purge_all_match:
-                if self.check_is_mod(author, msg):
+                if self.is_mod(msg):
                     user_email = user_purge_all_match.group(1)
                     self.purge_user_messages(stream_name, topic_name, user_email, 1000, msg)
+                else:
+                    self.send_response(msg, "Unauthorized")
                 return
 
             # Handle "clean" command (delete all bot messages in stream)
             if content.strip() == "clean":
-                if self.check_is_mod(author, msg):
+                if self.is_mod(msg):
                     self.purge_user_messages(stream_name, topic_name, "hasd-bot@hasd.zulipchat.com", 1000, msg)
+                else:
+                    self.send_response(msg, "Unauthorized")
                 return
 
             # Handle mute command
             user_mute_match = re.match(r"mute\s+([^\s@]+@[^\s]+)$", content)
             if user_mute_match:
-                if self.check_is_mod(author, msg):
+                if self.is_mod(msg):
                     user_email = user_mute_match.group(1)
                     self.mute_user(user_email, msg)
+                else:
+                    self.send_response(msg, "Unauthorized")
                 return
 
             # Handle unmute command
             user_unmute_match = re.match(r"unmute\s+([^\s@]+@[^\s]+)$", content)
             if user_unmute_match:
-                if self.check_is_mod(author, msg):
+                if self.is_mod(msg):
                     user_email = user_unmute_match.group(1)
                     self.unmute_user(user_email, msg)
+                else:
+                    self.send_response(msg, "Unauthorized")
                 return
 
             # Handle getnotes command
             user_getnote_match = re.match(r"getnotes\s+([^\s@]+@[^\s]+)$", content)
             if user_getnote_match:
-                if self.check_is_mod(author, msg):
+                if self.is_mod(msg):
                     user_email = user_getnote_match.group(1)
                     self.get_notes(user_email, author["user"]["user_id"], msg)
+                else:
+                    self.send_response(msg, "Unauthorized")
                 return
 
             # Handle addnote
             user_addnote_match = re.match(r"addnote\s+([^\s@]+@[^\s]+)\s+(.+)$", content)
             if user_addnote_match:
-                if self.check_is_mod(author, msg):
+                if self.is_mod(msg):
                     user_email = user_addnote_match.group(1)
                     note = user_addnote_match.group(2)
                     self.add_note(user_email, note, msg)
+                else:
+                    self.send_response(msg, "Unauthorized")
                 return
 
             # If no valid command matched
@@ -160,7 +159,8 @@ Available commands:
                 if del_response["result"] == "success":
                     deleted_count += 1
 
-            self.send_response(original_msg, f"Successfully deleted {deleted_count} messages")
+            if deleted_count > 1:
+                self.send_response(original_msg, f"Successfully deleted {deleted_count} messages")
 
         except Exception as e:
             self.send_response(original_msg, f"Error while purging messages: {str(e)}")
@@ -238,9 +238,6 @@ Available commands:
         except Exception as e:
             self.send_response(original_msg, f"Error while purging user messages: {str(e)}")
 
-    def delete_command_msg(self, msg: Dict[str, Any]):
-        self.client.delete_message(msg["id"])
-
     def mute_user(self, user_email: str, msg: Dict[str, Any]):
         user = self.getUserByEmail(user_email)
         userId = user["user"]["user_id"]
@@ -315,21 +312,25 @@ Available commands:
             json.dump(notes, f, indent=4) # indent for pretty printing
     
     def resolve(self, msg: Dict[str, Any]):
+        new_msg = self.send_response(msg, "Resolving ...")
         request = {
-            "message_id": msg["id"],
+            "message_id": new_msg["id"],
             "topic": f"✔ {msg["subject"]}", 
             "propagate_mode": "change_all"
         }
         self.client.update_message(request)
+        self.client.delete_message(new_msg["id"])
         return
 
     def unresolve(self, msg: Dict[str, Any]):
+        new_msg = self.send_response(msg, "Unresolving ...")
         request = {
-            "message_id": msg["id"],
+            "message_id": new_msg["id"],
             "topic": msg["subject"].lstrip("✔ "), 
             "propagate_mode": "change_all"
         }
         self.client.update_message(request)
+        self.client.delete_message(new_msg["id"])
         return
 
     def getUserId(self, user_email: str):
@@ -348,7 +349,7 @@ Available commands:
             "subject": original_msg["subject"],
             "content": content,
         }
-        self.client.send_message(request)
+        return self.client.send_message(request)
 
     def send_private_response(self, userId: int, content: str) -> None:
         """Send a private message."""
@@ -359,19 +360,36 @@ Available commands:
         }
         self.client.send_message(request)
 
-    def send_error_message(self, original_msg: Dict[str, Any]) -> None:
+    def send_error_message(self, msg: Dict[str, Any]) -> None:
         """Send error message with usage instructions."""
-        error_msg = "Invalid command format" + self.help_msg
-        self.send_response(original_msg, error_msg)
+        self.send_response(msg, "Invalid command format")
+        self.send_help_message(msg)
 
-    def send_help_message(self, original_msg: Dict[str, Any]) -> None:
-        """Send usage instructions"""
-        help_msg = self.help_msg
-        self.send_response(original_msg, help_msg)
+    def send_help_message(self, msg: Dict[str, Any]) -> None:
+        """Send usage instructions based on role"""
+        help_msg = """
+Available commands:
+### User commands
+- `@**HASD** resolve` Mark topic as resolved
+- `@**HASD** unresolve` Mark topic as unresolved"""
+        if self.is_mod(msg):
+            help_msg += """
+### Moderation Commands
+- `@**HASD** purge N` - Delete last N messages in the current topic
+- `@**HASD** purge email@example.com N` - Delete last N messages from specified user in the current topic
+- `@**HASD** purge email@example.com` - Delete all messages from specified user the current topic
+- `@**HASD** clean` Clean up all messages from the bot
+- `@**HASD** mute email@example.com` - Removes the specified user's ability to post messages
+- `@**HASD** unmute email@example.com` - Gives the specified user the ability to post messages
+- `@**HASD** getnotes email@example.com` - Get mod notes of the specified user
+- `@**HASD** addnote email@example.com <note>` - Adds a mod note to the specified user
+- `@**HASD** mute email@example.com` - Remove the ability for the specified user to post messages
+"""
+        self.send_response(msg, help_msg) 
 
-    def check_is_mod(self, author, msg):
+    def is_mod(self, msg):
+        author = self.client.get_user_by_id(msg["sender_id"])
         if int(author["user"]["role"]) > 300:
-            self.send_response(msg, "Unauthorized")
             return False
         return True
 
