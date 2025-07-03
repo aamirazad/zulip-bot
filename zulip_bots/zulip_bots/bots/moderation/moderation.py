@@ -28,15 +28,15 @@ class ModerationBot(object):
         """
         Returns the bot's usage string.
         """
-        self.zulip_client = zulip.Client(config_file="./zuliprc")
-        self.admin_zulip_client = zulip.Client(config_file="./personalzuliprc")
+        self.client = zulip.Client(config_file="./zuliprc")
+        self.admin_client = zulip.Client(config_file="./personalzuliprc")
         return "A moderation bot to help manage larger communities."
 
     def handle_message(self, message: Dict[str, Any], bot_handler: Any) -> None:
         """
         Handles incoming messages, deletes the command message, and processes the command.
         """
-        self.zulip_client.delete_message(message["id"])
+        self.client.delete_message(message["id"])
         self.process_command(message)
 
     def process_command(self, message: Dict[str, Any]) -> None:
@@ -54,10 +54,12 @@ class ModerationBot(object):
                 return
 
             # User commands (available to all users)
+            # Handle "resolve" command
             if self.RESOLVE_COMMAND.match(content):
                 self.resolve_topic(message)
                 return
 
+            # Handle "unresolve" command
             if self.UNRESOLVE_COMMAND.match(content):
                 self.unresolve_topic(message)
                 return
@@ -67,13 +69,14 @@ class ModerationBot(object):
                 self.send_response(message, "Unauthorized to use moderation commands.")
                 return
 
-            # Purge commands
+            # Handle "purge N" command
             purge_match = self.PURGE_COMMAND.match(content)
             if purge_match:
                 count = int(purge_match.group(1))
                 self.purge_messages(stream_name, topic_name, count, message)
                 return
 
+            # Handle "purge email@example.com N" command
             purge_user_match = self.PURGE_USER_COMMAND.match(content)
             if purge_user_match:
                 user_email = purge_user_match.group(1)
@@ -81,37 +84,41 @@ class ModerationBot(object):
                 self.purge_user_messages(stream_name, topic_name, user_email, count, message)
                 return
 
+            # Handle "purge email@example.com" command (all messages from user)
             purge_user_all_match = self.PURGE_USER_ALL_COMMAND.match(content)
             if purge_user_all_match:
                 user_email = purge_user_all_match.group(1)
                 self.purge_user_messages(stream_name, topic_name, user_email, 1000, message)
                 return
 
+            # Handle "clean" command (delete all bot messages in stream)
             if content.strip() == "clean":
                 self.purge_user_messages(stream_name, topic_name, "hasd-bot@hasd.zulipchat.com", 1000, message)
                 return
 
-            # Mute/unmute commands
+            # Handle "mute" command
             mute_match = self.MUTE_COMMAND.match(content)
             if mute_match:
                 user_email = mute_match.group(1)
                 self.mute_user(user_email, message)
                 return
 
+            # Handle "unmute" command
             unmute_match = self.UNMUTE_COMMAND.match(content)
             if unmute_match:
                 user_email = unmute_match.group(1)
                 self.unmute_user(user_email, message)
                 return
 
-            # Note commands
+            # Handle "getnotes" command
             get_notes_match = self.GET_NOTES_COMMAND.match(content)
             if get_notes_match:
                 user_email = get_notes_match.group(1)
                 author_id = message["sender_id"]
                 self.get_notes(user_email, author_id, message)
                 return
-
+            
+            # Handle "addnote" command
             add_note_match = self.ADD_NOTE_COMMAND.match(content)
             if add_note_match:
                 user_email = add_note_match.group(1)
@@ -129,7 +136,7 @@ class ModerationBot(object):
         """Delete the last N messages from a topic."""
         try:
             # Get the most recent messages from the topic
-            response = self.zulip_client.get_messages(
+            response = self.client.get_messages(
                 {
                     "anchor": "newest",
                     "num_before": count,
@@ -145,11 +152,11 @@ class ModerationBot(object):
             # Delete the fetched messages
             deleted_count = 0
             for message in response["messages"]:
-                delete_response = self.zulip_client.delete_message(message["id"])
+                delete_response = self.client.delete_message(message["id"])
                 if delete_response["result"] == "success":
                     deleted_count += 1
 
-            if deleted_count > 0:
+            if deleted_count > 1:
                 self.send_response(original_message, f"Successfully deleted {deleted_count} messages.")
 
         except Exception as e:
@@ -161,7 +168,7 @@ class ModerationBot(object):
         """Delete the last N messages from a specific user in a topic."""
         try:
             # Get user-specific messages
-            response = self.zulip_client.get_messages(
+            response = self.client.get_messages(
                 {
                     "anchor": "newest",
                     "num_before": count,
@@ -175,13 +182,13 @@ class ModerationBot(object):
             )
 
             if response["result"] != "success":
-                self.send_response(original_message, "Failed to fetch user messages for purging.")
+                self.send_response(original_message, f"Error while purging user messages: {str(response)}")
                 return
 
             # Delete the fetched messages
             deleted_count = 0
             for message in response["messages"]:
-                delete_response = self.zulip_client.delete_message(message["id"])
+                delete_response = self.client.delete_message(message["id"])
                 if delete_response["result"] == "success":
                     deleted_count += 1
 
@@ -193,19 +200,19 @@ class ModerationBot(object):
             self.send_response(original_message, f"Error while purging user messages: {str(e)}")
 
     def mute_user(self, user_email: str, message: Dict[str, Any]):
-        """Mutes a user by removing them from the 'everyone' group and updating their name."""
-        user_id = self.get_user_id(user_email)
+        """Mutes a user by removing them from the 'Members' group and updating their name."""
+        user = self.get_user_by_email(user_email)
+        user_id = user["user"]["user_id"]
         if not user_id:
             self.send_response(message, f"Could not find user with email: {user_email}")
             return
 
-        # Remove user from the 'everyone' group to mute them.
+        # Remove user from the 'Members' group to mute them.
         # NOTE: The group ID (1066759) is specific to this Zulip instance.
         request = {"delete": [user_id]}
-        response = self.admin_zulip_client.update_user_group_members(1066759, request)
+        response = self.admin_client.update_user_group_members(1066759, request)
 
-        user_details = self.zulip_client.get_user_by_id(user_id)
-        self.zulip_client.update_user_by_id(user_id, full_name=f"{user_details['user']['full_name']} (Muted)")
+        self.client.update_user_by_id(user_id, full_name=f"{user['user']['full_name']} (Muted)")
 
         if response["result"] == "success":
             self.send_response(message, f"Successfully muted user {user_email}.")
@@ -215,7 +222,8 @@ class ModerationBot(object):
 
     def unmute_user(self, user_email: str, message: Dict[str, Any]):
         """Unmutes a user by adding them back to the 'everyone' group and updating their name."""
-        user_id = self.get_user_id(user_email)
+        user = self.get_user_by_email(user_email)
+        user_id = user["user"]["user_id"]
         if not user_id:
             self.send_response(message, f"Could not find user with email: {user_email}")
             return
@@ -223,11 +231,10 @@ class ModerationBot(object):
         # Add user back to the 'everyone' group to unmute.
         # NOTE: The group ID (1066759) is specific to this Zulip instance.
         request = {"add": [user_id]}
-        response = self.admin_zulip_client.update_user_group_members(1066759, request)
+        response = self.admin_client.update_user_group_members(1066759, request)
 
-        user_details = self.zulip_client.get_user_by_id(user_id)
-        new_name = user_details["user"]["full_name"].replace(" (Muted)", "").strip()
-        self.zulip_client.update_user_by_id(user_id, full_name=new_name)
+        new_name = user["user"]["full_name"].replace(" (Muted)", "").strip()
+        self.client.update_user_by_id(user_id, full_name=new_name)
 
         if response["result"] == "success":
             self.send_response(message, f"Successfully unmuted user {user_email}.")
@@ -285,8 +292,8 @@ class ModerationBot(object):
             "topic": f"✔ {message['subject']}",
             "propagate_mode": "change_all"
         }
-        self.zulip_client.update_message(request)
-        self.zulip_client.delete_message(temp_message["id"])
+        self.client.update_message(request)
+        self.client.delete_message(temp_message["id"])
 
     def unresolve_topic(self, message: Dict[str, Any]) -> None:
         """Marks a topic as unresolved by removing the checkmark prefix."""
@@ -297,19 +304,24 @@ class ModerationBot(object):
             "topic": message["subject"].lstrip("✔ "),
             "propagate_mode": "change_all"
         }
-        self.zulip_client.update_message(request)
-        self.zulip_client.delete_message(temp_message["id"])
+        self.client.update_message(request)
+        self.client.delete_message(temp_message["id"])
 
-    def get_user_id(self, user_email: str) -> int:
-        """Retrieves a user's ID from their email address."""
+    def get_user_by_email(self, user_email: str):
+        """Retrieves user info from their email address."""
         try:
-            result = self.zulip_client.call_endpoint(
+            result = self.client.call_endpoint(
                 url=f"/users/{user_email}",
                 method="GET",
             )
-            return result["user"]["user_id"]
+            return result
         except Exception:
             return None
+
+    def get_user_id(self, user_email: str) -> int:
+        """Retrieves a user's ID from their email address."""
+        result = self.get_user_by_email(user_email)
+        return result["user"]["user_id"]
 
     def send_response(self, original_message: Dict[str, Any], content: str) -> Dict[str, Any]:
         """Sends a response message to the same topic as the original message."""
@@ -319,7 +331,7 @@ class ModerationBot(object):
             "subject": original_message["subject"],
             "content": content,
         }
-        return self.zulip_client.send_message(request)
+        return self.client.send_message(request)
 
     def send_private_message(self, user_id: int, content: str) -> None:
         """Sends a private message to a user."""
@@ -328,7 +340,7 @@ class ModerationBot(object):
             "to": [user_id],
             "content": content,
         }
-        self.zulip_client.send_message(request)
+        self.client.send_message(request)
 
     def send_error_message(self, message: Dict[str, Any]) -> None:
         """Sends an error message indicating an invalid command."""
@@ -359,7 +371,7 @@ class ModerationBot(object):
 
     def is_moderator(self, message: Dict[str, Any]) -> bool:
         """Checks if the message author is a moderator."""
-        author_details = self.zulip_client.get_user_by_id(message["sender_id"])
+        author_details = self.client.get_user_by_id(message["sender_id"])
         # Role > 300 are members and guests.
         return int(author_details["user"]["role"]) <= 300
 
