@@ -180,6 +180,7 @@ class ModerationBot(object):
         self, stream_name: str, topic_name: str, user_email: str, count: int, original_message: Dict[str, Any]
     ) -> None:
         """Delete the last N messages from a specific user in a topic."""
+        user_id = self.get_user_id(user_email)
         try:
             # Get user-specific messages
             response = self.client.get_messages(
@@ -190,7 +191,7 @@ class ModerationBot(object):
                     "narrow": [
                         {"operator": "stream", "operand": stream_name},
                         {"operator": "topic", "operand": topic_name},
-                        {"operator": "sender", "operand": user_email},
+                        {"operator": "sender", "operand": user_id},
                     ],
                 }
             )
