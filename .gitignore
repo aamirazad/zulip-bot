@@ -45,7 +45,10 @@ zuliprc
 botserverrc
 .botserverrc
 personalzuliprc
-NOTES.json
+
+# Database files
+lockdown.json
+notes.json
 
 # vim
 .swp

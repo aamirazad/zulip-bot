@@ -7,6 +7,9 @@ import json
 import os
 
 NOTES_FILE = "notes.json"
+LOCKDOWN_FILE = "lockdown.json"
+# NOTE: The group ID (1066759) is specific to this Zulip instance.
+MEMBERS_GROUP_ID = 1066759
 
 class ModerationBot(object):
     """
@@ -23,6 +26,8 @@ class ModerationBot(object):
     UNMUTE_COMMAND = re.compile(r"unmute\s+([^\s@]+@[^\s]+)$")
     GET_NOTES_COMMAND = re.compile(r"getnotes\s+([^\s@]+@[^\s]+)$")
     ADD_NOTE_COMMAND = re.compile(r"addnote\s+([^\s@]+@[^\s]+)\s+(.+)$")
+    LOCKDOWN_START_COMMAND = re.compile(r"lockdown start$")
+    LOCKDOWN_END_COMMAND = re.compile(r"lockdown end$")
 
     def usage(self) -> str:
         """
@@ -126,6 +131,15 @@ class ModerationBot(object):
                 self.add_note(user_email, note, message)
                 return
 
+            # Lockdown commands
+            if self.LOCKDOWN_START_COMMAND.match(content):
+                self.lockdown_start(message)
+                return
+
+            if self.LOCKDOWN_END_COMMAND.match(content):
+                self.lockdown_end(message)
+                return
+
             # If no valid command is matched, send an error message.
             self.send_error_message(message)
 
@@ -199,6 +213,103 @@ class ModerationBot(object):
         except Exception as e:
             self.send_response(original_message, f"Error while purging user messages: {str(e)}")
 
+    def lockdown_start(self, message: Dict[str, Any]):
+        """Starts a lockdown, removing posting rights from the members group in relevant streams."""
+        status_message = self.send_response(message, "Starting lockdown...")
+        try:
+            streams = self.client.get_streams(include_all=True)['streams']
+            locked_streams = []
+
+            for stream in streams:
+                can_post_setting = stream.get('can_send_message_group')
+                can_post_groups = []
+                is_group_object = isinstance(can_post_setting, dict)
+
+                if is_group_object:
+                    can_post_groups = can_post_setting.get('direct_subgroups', [])
+                elif isinstance(can_post_setting, int):
+                    can_post_groups = [can_post_setting]
+
+                if MEMBERS_GROUP_ID in can_post_groups:
+                    new_groups = [group for group in can_post_groups if group != MEMBERS_GROUP_ID]
+                    
+                    # When can_send_message_group is an object, we must pass an object back.
+                    if is_group_object:
+                        # Preserve existing direct_members
+                        new_group_setting = {
+                            "new": {
+                                "direct_subgroups": new_groups,
+                                "direct_members": can_post_setting.get("direct_members", [])
+                            }
+                        }
+                    else:
+                        # If only one group could post and it was the members group, no one can post.
+                        # The API may expect an empty list or a specific value. Assuming empty list is safe.
+                        # If there were multiple groups, we just need to set the new list.
+                        # If new_groups has one item, it becomes an int. If more, a list.
+                        # Based on the docs, it seems we should be using zulip-group-based permissions,
+                        # so we will construct a dict for the new permissions.
+                        new_group_setting = {
+                            "new": {
+                                "direct_subgroups": new_groups,
+                                "direct_members": []
+                            }
+                        }
+
+                    self.client.update_stream({
+                        "stream_id": stream['stream_id'],
+                        "can_send_message_group": new_group_setting
+                    })
+
+
+                    locked_streams.append({
+                        "stream_id": stream['stream_id'],
+                        "stream_name": stream['name'],
+                        "original_can_post_message_groups": can_post_setting
+                    })
+            
+            self.save_lockdown_state(locked_streams)
+            self.client.delete_message(status_message["id"])
+            self.send_response(message, f"Lockdown started. {len(locked_streams)} streams affected.")
+        except Exception as e:
+            self.send_response(message, f"Error starting lockdown: {e}")
+
+    def lockdown_end(self, message: Dict[str, Any]):
+        """Ends a lockdown, restoring posting rights to the members group."""
+        status_message = self.send_response(message, "Ending lockdown...")
+        try:
+            locked_streams = self.load_lockdown_state()
+            if not locked_streams:
+                self.client.delete_message(status_message["id"])
+                self.send_response(message, "No active lockdown found.")
+                return
+
+            for stream_info in locked_streams:
+                self.client.update_stream({
+                    "stream_id": stream_info['stream_id'],
+                    "can_send_message_group": {"new": stream_info['original_can_post_message_groups']
+                    }
+                })
+
+            self.save_lockdown_state([])  # Clear lockdown state
+            self.client.delete_message(status_message["id"])
+            self.send_response(message, f"Lockdown ended. {len(locked_streams)} streams restored.")
+        except Exception as e:
+            self.send_response(message, f"Error ending lockdown: {e}")
+
+    def save_lockdown_state(self, data):
+        with open(LOCKDOWN_FILE, 'w') as f:
+            json.dump(data, f, indent=4)
+
+    def load_lockdown_state(self):
+        if not os.path.exists(LOCKDOWN_FILE):
+            return []
+        with open(LOCKDOWN_FILE, 'r') as f:
+            try:
+                return json.load(f)
+            except json.JSONDecodeError:
+                return []
+
     def mute_user(self, user_email: str, message: Dict[str, Any]):
         """Mutes a user by removing them from the 'Members' group and updating their name."""
         user = self.get_user_by_email(user_email)
@@ -208,9 +319,8 @@ class ModerationBot(object):
             return
 
         # Remove user from the 'Members' group to mute them.
-        # NOTE: The group ID (1066759) is specific to this Zulip instance.
         request = {"delete": [user_id]}
-        response = self.admin_client.update_user_group_members(1066759, request)
+        response = self.admin_client.update_user_group_members(MEMBERS_GROUP_ID, request)
 
         self.client.update_user_by_id(user_id, full_name=f"{user['user']['full_name']} (Muted)")
 
@@ -366,6 +476,8 @@ class ModerationBot(object):
 - `@HASD unmute <email>`: Unmute a user.
 - `@HASD getnotes <email>`: Get moderation notes for a user.
 - `@HASD addnote <email> <note>`: Add a moderation note for a user.
+- `@HASD lockdown start`: Remove posting rights from the members group in all channels.
+- `@HASD lockdown end`: Restore posting rights to the members group.
 """
         self.send_response(message, help_text)
 
