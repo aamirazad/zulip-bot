@@ -264,7 +264,7 @@ class ModBot(object):
         res = self.adminClient.update_user_group_members(1066759, request)
 
         user = self.client.get_user_by_id(userId)
-        newName = user["user"]["full_name"].rstrip(" (Muted)")
+        newName = user["user"]["full_name"].rstrip("(Muted)")
         self.client.update_user_by_id(userId, full_name=newName)
 
         if res["result"] == "success":
