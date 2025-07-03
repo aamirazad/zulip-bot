@@ -8,7 +8,7 @@ import os
 
 NOTES_FILE = "notes.json"
 LOCKDOWN_FILE = "lockdown.json"
-# NOTE: The group ID (1066759) is specific to this Zulip instance.
+# NOTE: The members group ID (1066759) is specific to this Zulip instance.
 MEMBERS_GROUP_ID = 1066759
 
 class ModerationBot(object):
