@@ -45,6 +45,7 @@ zuliprc
 botserverrc
 .botserverrc
 personalzuliprc
+.env
 
 # Database files
 lockdown.json

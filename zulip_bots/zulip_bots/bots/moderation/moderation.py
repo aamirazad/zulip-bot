@@ -5,6 +5,8 @@ import re
 from typing import Dict, Any
 import json
 import os
+import requests
+import random
 
 NOTES_FILE = "notes.json"
 LOCKDOWN_FILE = "lockdown.json"
@@ -51,11 +53,16 @@ class ModerationBot(object):
         content = message["content"].strip()
         stream_name = message.get("display_recipient", "")
         topic_name = message.get("subject", "")
-
+        self.track_event({
+            'type': 'pageview',
+            'user_id': str(random.randint(1, 100000)),
+            'pathname': '/msg',
+        })
         try:
             # Handle help and empty commands
             if content in ("", "help"):
                 self.send_help_message(message)
+
                 return
 
             # User commands (available to all users)
@@ -122,7 +129,7 @@ class ModerationBot(object):
                 author_id = message["sender_id"]
                 self.get_notes(user_email, author_id, message)
                 return
-            
+
             # Handle "addnote" command
             add_note_match = self.ADD_NOTE_COMMAND.match(content)
             if add_note_match:
@@ -233,7 +240,7 @@ class ModerationBot(object):
 
                 if MEMBERS_GROUP_ID in can_post_groups:
                     new_groups = [group for group in can_post_groups if group != MEMBERS_GROUP_ID]
-                    
+
                     # When can_send_message_group is an object, we must pass an object back.
                     if is_group_object:
                         # Preserve existing direct_members
@@ -268,7 +275,7 @@ class ModerationBot(object):
                         "stream_name": stream['name'],
                         "original_can_post_message_groups": can_post_setting
                     })
-            
+
             self.save_lockdown_state(locked_streams)
             self.client.delete_message(status_message["id"])
             self.send_response(message, f"Lockdown started. {len(locked_streams)} streams affected.")
@@ -487,5 +494,19 @@ class ModerationBot(object):
         author_details = self.client.get_user_by_id(message["sender_id"])
         # Role > 300 are members and guests.
         return int(author_details["user"]["role"]) <= 300
+
+    def track_event(self, event_data):
+        if os.getenv('RYBBIT_API_KEY'):
+            response = requests.post(
+                'https://analytics.aamira.me/api/track',
+                headers={'Content-Type': 'application/json'},
+                json={
+                    'api_key': os.getenv('RYBBIT_API_KEY'),
+                    'site_id': os.getenv('RYBBIT_SITE_ID'),
+                    **event_data
+                }
+            )
+            return response.json()
+        return None
 
 handler_class = ModerationBot
