@@ -3,6 +3,8 @@
 This repo host my moderation bot for the HASD zulip community as well as any other
 utility bot I create.
 
+The code that I wrote (not the [zulip app](https://github.com/zulip/python-zulip-api) template files) can be found [here](https://github.com/aamirazad/zulip-bot/blob/main/zulip_bots/zulip_bots/bots/moderation/moderation.py)
+
 ## Demo (SoM)
 
 This [video](https://hc-cdn.hel1.your-objectstorage.com/s/v3/5f45a6faa4747cb5e21ea14421df005b8da2caa6_03.07.2025_13.56.44_rec.mp4) is a super easy way to see the bot in action, I **highly recommend** you just watch this.
@@ -62,6 +64,5 @@ And if for whatever reason you want to run the bot yourself on your own hardware
 
 ### AI Use
 
-AI was used to generate the moderation.py file but almost all of it was
-changed in some way (cause it didn't work at all) really only the structure
-remains.
+AI was used to fully understand the api but the logic was written by me.
+Although my code worked, it was a bit hard to read so I had AI clean it up, no functialty was added, and the commit can be found [here](https://github.com/aamirazad/zulip-bot/commit/52955e3347c0b8ecd203fbe809ff07276999b1b0). 
