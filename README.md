@@ -60,25 +60,6 @@ And if for whatever reason you want to run the bot yourself on your own hardware
     zulip-run-bot moderation --config-file ~/path/to/zuliprc
     ```
 
-### Running tests
-
-You can run all the tests with:
-
-`pytest`
-
-or test individual packages with `pytest zulip`, `pytest zulip_bots`,
-or `pytest zulip_botserver` (see the [pytest
-documentation](https://docs.pytest.org/en/latest/how-to/usage.html)
-for more options).
-
-To run the linter, type:
-
-`./tools/lint`
-
-To check the type annotations, run:
-
-`./tools/run-mypy`
-
 ### AI Use
 
 AI was used to generate the moderation.py file but almost all of it was
