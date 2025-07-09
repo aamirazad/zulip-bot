@@ -59,7 +59,7 @@ And if, for whatever reason, you want to run the bot yourself on your own hardwa
 
 6. Run the bot in development mode:
     ```
-    zulip-run-bot moderation --config-file ~/path/to/zuliprc
+    zulip-run-bot moderation --config-file ~/zuliprc
     ```
 
 ### AI Use
