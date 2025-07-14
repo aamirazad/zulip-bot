@@ -15,7 +15,7 @@ If you insist and want to try it out yourself, please visit https://hasd.zulipch
 
 And if, for whatever reason, you want to run the bot yourself on your own hardware, you will need your own [zulip](http://zulip.com/) organization, and just follow the development steps below and throw the run-bot command as a background task.
 
-## Development
+## Run the bot
 
 1. Clone the Git repo:
 
@@ -23,13 +23,15 @@ And if, for whatever reason, you want to run the bot yourself on your own hardwa
     git clone https://github.com/aamirazad/zulip-bot.git
     ```
 
-2. Make sure you have [pip](https://pip.pypa.io/en/stable/installing/).
+2. Make sure you edit the moderation.py's global variables to work with your org.
 
 3. Run:
 
     ```
     python3 ./tools/provision
     ```
+
+    Make sure you have [pip](https://pip.pypa.io/en/stable/installing/).
 
     This sets up a virtual Python environment in `zulip-api-py<your_python_version>-venv`,
     where `<your_python_version>` is your default version of Python. If you would like to specify
@@ -57,10 +59,12 @@ And if, for whatever reason, you want to run the bot yourself on your own hardwa
     You should now be able to run any commands/tests/etc. in this
     virtual environment.
 
-6. Run the bot in development mode:
+6. Run the bot
     ```
     zulip-run-bot moderation --config-file ./zuliprc
     ```
+
+Throw this in screen or make a systemd file to run the bot in the background.
 
 ### AI Use
 
