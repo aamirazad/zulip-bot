@@ -68,5 +68,5 @@ Throw this in screen or make a systemd file to run the bot in the background.
 
 ### AI Use
 
-AI was used to fully understand the api but the logic was written by me.
+All the features of the bot was written by hand.
 Although my code worked, it was a bit hard to read, so I had AI clean it up. No functionality was added, and the commit can be found [here](https://github.com/aamirazad/zulip-bot/commit/52955e3347c0b8ecd203fbe809ff07276999b1b0). 
