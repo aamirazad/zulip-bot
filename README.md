@@ -11,7 +11,7 @@ This [video](https://hc-cdn.hel1.your-objectstorage.com/s/v3/5f45a6faa4747cb5e21
 
 https://github.com/user-attachments/assets/b319140f-ce7d-47bc-ae8b-ddec0bc0b000
 
-If you insist and want to try it out yourself, please visit https://hasd.zulipchat.com/join/a6amkfo3hlv4cqqr3kvpl55w/ and create an account. _Please_ don't mess anything up and stay in the bot chat topic under mod chat. Mention the bot with `@**HASD**` to get started.
+If you insist and want to try it out yourself, please visit https://hasd.zulipchat.com/join/7rgo5m4p7gftbhlj6sjhi7en/ and create an account. Don't mess anything up and stay in the bot chat topic under mod chat. Mention the bot with `@**HASD**` to get started.
 
 And if, for whatever reason, you want to run the bot yourself on your own hardware, you will need your own [zulip](http://zulip.com/) organization, and just follow the development steps below and throw the run-bot command as a background task.
 
